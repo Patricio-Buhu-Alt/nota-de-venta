@@ -1,0 +1,16 @@
+{
+  "name": "nota-bodega-app",
+  "version": "1.0.0",
+  "description": "App Shopify: toma cada venta, genera un PDF con el detalle y lo envia por email a bodega.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "sample": "node scripts/sample.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14",
+    "pdfkit": "^0.15.0"
+  }
+}

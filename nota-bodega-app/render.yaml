@@ -1,0 +1,31 @@
+# Deploy en Render (https://render.com) — "New > Blueprint" apuntando a este repo.
+services:
+  - type: web
+    name: nota-bodega
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: SHOPIFY_WEBHOOK_SECRET
+        sync: false
+      - key: WAREHOUSE_EMAIL
+        sync: false
+      - key: CC_EMAILS
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      # Opcional, para las miniaturas de producto:
+      - key: SHOPIFY_SHOP
+        sync: false
+      - key: SHOPIFY_ADMIN_TOKEN
+        sync: false
