@@ -1,9 +1,9 @@
-# Deploy en Render (https://render.com) — "New > Blueprint" apuntando a este repo.
 services:
   - type: web
     name: nota-bodega
     runtime: node
     plan: free
+    rootDir: nota-bodega-app
     buildCommand: npm install
     startCommand: node src/server.js
     healthCheckPath: /health
@@ -24,7 +24,6 @@ services:
         sync: false
       - key: SMTP_FROM
         sync: false
-      # Opcional, para las miniaturas de producto:
       - key: SHOPIFY_SHOP
         sync: false
       - key: SHOPIFY_ADMIN_TOKEN
