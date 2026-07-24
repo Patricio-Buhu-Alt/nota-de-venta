@@ -59,7 +59,17 @@ export function buildOrderPdf(order, store = {}) {
     const afterCol2 = doc.y;
 
     doc.y = Math.max(afterCol1, afterCol2);
-    doc.moveDown(1.2);
+    doc.moveDown(1);
+
+    // Distancia pupilar (DP) — metafield buhu.distancia_pupilar (solo si existe; ya trae "mm")
+    if (order.dp && String(order.dp).trim()) {
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111")
+        .text("Distancia pupilar (DP): ", left, doc.y, { continued: true })
+        .font("Helvetica").fillColor("#333333").text(clean(order.dp));
+      doc.moveDown(0.3);
+    }
+
+    doc.moveDown(0.9);
     rule(doc, left, right);
     doc.moveDown(0.8);
 
@@ -96,18 +106,18 @@ export function buildOrderPdf(order, store = {}) {
 
       // Bloque del articulo
       doc.font("Helvetica").fontSize(11).fillColor("#111111")
-        .text(item.title || "(producto)", textX, rowY, { width: itemW });
+        .text(clean(item.title) || "(producto)", textX, rowY, { width: itemW });
       if (item.variant_title && item.variant_title !== "Default Title")
-        doc.fontSize(10).fillColor("#444444").text(item.variant_title, textX, doc.y, { width: itemW });
+        doc.fontSize(10).fillColor("#444444").text(clean(item.variant_title), textX, doc.y, { width: itemW });
       if (item.sku)
-        doc.fontSize(10).fillColor("#444444").text(item.sku, textX, doc.y, { width: itemW });
+        doc.fontSize(10).fillColor("#444444").text(clean(item.sku), textX, doc.y, { width: itemW });
 
       // TODAS las propiedades de linea (aqui viaja la receta si la orden la trae)
       (item.properties || [])
         .filter((p) => p && p.name != null && String(p.value).trim() !== "")
         .forEach((p) => {
           const name = String(p.name).replace(/^_/, "");
-          doc.fontSize(10).fillColor("#444444").text(`${name}: ${p.value}`, textX, doc.y, { width: itemW });
+          doc.fontSize(10).fillColor("#444444").text(`${clean(name)}: ${clean(p.value)}`, textX, doc.y, { width: itemW });
         });
 
       // La fila baja hasta lo mas bajo entre el texto y la miniatura
@@ -126,7 +136,7 @@ export function buildOrderPdf(order, store = {}) {
       doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111").text("NOTAS", left);
       doc.moveDown(0.4);
       doc.font("Helvetica").fontSize(10).fillColor("#333333")
-        .text(String(order.note).trim(), left, doc.y, { width: contentW });
+        .text(clean(order.note), left, doc.y, { width: contentW });
     }
 
     // ---- Pie de la tienda ----
@@ -159,7 +169,7 @@ function addrColumn(doc, heading, addr, x, y, w, emptyText) {
     doc.text(emptyText || "—", x, doc.y, { width: w });
     return;
   }
-  addressLines(addr).forEach((ln) => doc.text(ln, x, doc.y, { width: w }));
+  addressLines(addr).forEach((ln) => doc.text(clean(ln), x, doc.y, { width: w }));
 }
 
 function addressLines(a) {
@@ -178,6 +188,19 @@ function addressLines(a) {
 
 function rule(doc, x1, x2) {
   doc.moveTo(x1, doc.y).lineTo(x2, doc.y).lineWidth(1).strokeColor("#111111").stroke();
+}
+
+// Deja solo caracteres que la fuente base (WinAnsi) puede dibujar; quita emojis y
+// simbolos raros (ej. el 📏 de las notas del Medidor) que si no salen como basura.
+function clean(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(
+      /[^\x09\x0A\x0D\x20-\x7E -ÿ–—‘’“”•…€™]/g,
+      ""
+    )
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 function formatDate(iso) {

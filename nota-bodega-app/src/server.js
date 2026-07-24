@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import { buildOrderPdf } from "./pdf.js";
 import { sendNota } from "./email.js";
-import { attachProductImages } from "./shopify.js";
+import { enrichOrder } from "./shopify.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,7 +35,7 @@ app.post(
 );
 
 async function processOrder(order) {
-  await attachProductImages(order); // miniaturas (si hay credenciales de Admin API)
+  await enrichOrder(order); // DP + miniaturas (si hay credenciales de Admin API)
   const pdfBuffer = await buildOrderPdf(order, storeFromEnv());
   const messageId = await sendNota({ order, pdfBuffer });
   console.log(`[OK] Nota de ${order.name} enviada a bodega (messageId ${messageId})`);
