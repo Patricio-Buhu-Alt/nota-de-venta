@@ -34,7 +34,25 @@ app.post(
   }
 );
 
+// Anti-duplicados: no procesar dos veces la misma orden. Cubre webhooks duplicados
+// (dos suscripciones) y reintentos de Shopify (ej. cuando Render estaba dormido).
+// La verificacion + registro es sincrona (antes del primer await), asi que dos avisos
+// casi simultaneos no se cuelan. Se guarda en memoria; basta para un solo proceso.
+const seen = new Set();
+function alreadyProcessed(order) {
+  const key = String(order.id || order.name || "");
+  if (!key) return false;
+  if (seen.has(key)) return true;
+  seen.add(key);
+  if (seen.size > 1000) seen.delete(seen.values().next().value); // acota memoria
+  return false;
+}
+
 async function processOrder(order) {
+  if (alreadyProcessed(order)) {
+    console.log(`[skip] Orden ${order.name} ya procesada (aviso duplicado)`);
+    return;
+  }
   await enrichOrder(order); // DP + miniaturas (si hay credenciales de Admin API)
   const pdfBuffer = await buildOrderPdf(order, storeFromEnv());
   const messageId = await sendNota({ order, pdfBuffer });
