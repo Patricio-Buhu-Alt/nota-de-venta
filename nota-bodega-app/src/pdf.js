@@ -18,8 +18,9 @@ export const DEFAULT_STORE = {
 // Convierte una orden de Shopify (payload del webhook orders/create) en un PDF (Buffer),
 // con el mismo formato que la nota de venta de Buhu (Order Printer).
 // Cada line_item puede traer `image` (ruta de archivo o Buffer) para mostrar la miniatura.
-export function buildOrderPdf(order, store = {}) {
+export async function buildOrderPdf(order, store = {}) {
   const cfg = { ...DEFAULT_STORE, ...store };
+  const logoSrc = await resolveLogo(cfg);
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const chunks = [];
@@ -33,9 +34,9 @@ export function buildOrderPdf(order, store = {}) {
 
     // ---- Encabezado: logo (izq) + Pedido/fecha (der) ----
     const headerTop = doc.y;
-    if (cfg.logoPath && fs.existsSync(cfg.logoPath)) {
+    if (logoSrc) {
       try {
-        doc.image(cfg.logoPath, left, headerTop, { height: 58 });
+        doc.image(logoSrc, left, headerTop, { height: 58 });
       } catch { /* si el logo falla, seguir sin el */ }
     }
     const orderNum = order.order_number || String(order.name || "").replace("#", "");
@@ -112,12 +113,11 @@ export function buildOrderPdf(order, store = {}) {
       if (item.sku)
         doc.fontSize(10).fillColor("#444444").text(clean(item.sku), textX, doc.y, { width: itemW });
 
-      // TODAS las propiedades de linea (aqui viaja la receta si la orden la trae)
+      // Propiedades de linea visibles (salta las ocultas que empiezan con "_").
       (item.properties || [])
-        .filter((p) => p && p.name != null && String(p.value).trim() !== "")
+        .filter((p) => p && p.name != null && String(p.value).trim() !== "" && !String(p.name).startsWith("_"))
         .forEach((p) => {
-          const name = String(p.name).replace(/^_/, "");
-          doc.fontSize(10).fillColor("#444444").text(`${clean(name)}: ${clean(p.value)}`, textX, doc.y, { width: itemW });
+          doc.fontSize(10).fillColor("#444444").text(`${clean(p.name)}: ${clean(p.value)}`, textX, doc.y, { width: itemW });
         });
 
       // La fila baja hasta lo mas bajo entre el texto y la miniatura
@@ -137,6 +137,35 @@ export function buildOrderPdf(order, store = {}) {
       doc.moveDown(0.4);
       doc.font("Helvetica").fontSize(10).fillColor("#333333")
         .text(clean(order.note), left, doc.y, { width: contentW });
+    }
+
+    // ---- Documento tributario (Boleta/Factura, desde los atributos del pedido) ----
+    const docType = noteAttr(order, "Tipo de documento");
+    if (docType) {
+      if (doc.y > 660) doc.addPage();
+      doc.moveDown(1);
+      const boxTop = doc.y;
+      const padX = 10, padY = 8;
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111")
+        .text("DOCUMENTO TRIBUTARIO", left + padX, boxTop + padY, { width: contentW - 2 * padX });
+      doc.moveDown(0.2);
+      doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111")
+        .text(clean(docType), left + padX, doc.y, { width: contentW - 2 * padX });
+      if (docType.toLowerCase() === "factura") {
+        doc.font("Helvetica").fontSize(10).fillColor("#333333");
+        [
+          ["RUT", noteAttr(order, "RUT")],
+          ["Razón social", noteAttr(order, "Razón social")],
+          ["Giro", noteAttr(order, "Giro")],
+          ["Dirección", noteAttr(order, "Dirección facturación")],
+        ].forEach(([label, val]) => {
+          if (val) doc.text(`${label}: ${clean(val)}`, left + padX, doc.y, { width: contentW - 2 * padX });
+        });
+      }
+      const boxBottom = doc.y + padY;
+      doc.roundedRect(left, boxTop, contentW, boxBottom - boxTop, 6)
+        .lineWidth(1).strokeColor("#cccccc").stroke();
+      doc.y = boxBottom;
     }
 
     // ---- Pie de la tienda ----
@@ -201,6 +230,33 @@ function clean(s) {
     )
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+// Lee un atributo del pedido (note_attributes) por nombre, sin distinguir mayusculas.
+function noteAttr(order, name) {
+  const list = order.note_attributes || [];
+  const found = list.find(
+    (a) => a && String(a.name).trim().toLowerCase() === String(name).toLowerCase()
+  );
+  return found && String(found.value).trim() !== "" ? String(found.value).trim() : null;
+}
+
+// Resuelve el logo: buffer explicito > LOGO_URL (cacheado) > archivo local. Null si no hay.
+let _logoCache = null; // null = no intentado, false = fallo
+async function resolveLogo(cfg) {
+  if (cfg.logoBuffer) return cfg.logoBuffer;
+  const url = process.env.LOGO_URL;
+  if (url) {
+    if (_logoCache === null) {
+      try {
+        const r = await fetch(url);
+        _logoCache = r.ok ? Buffer.from(await r.arrayBuffer()) : false;
+      } catch { _logoCache = false; }
+    }
+    if (_logoCache) return _logoCache;
+  }
+  if (cfg.logoPath && fs.existsSync(cfg.logoPath)) return cfg.logoPath;
+  return null;
 }
 
 function formatDate(iso) {
